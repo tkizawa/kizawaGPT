@@ -8,7 +8,7 @@ import datetime
 class ChatApp:
     def __init__(self, master):
         self.master = master
-        master.title("Azure OpenAI Chat")
+        master.title("KizawaGPT")
         
         self.load_settings()
         self.load_window_state()
@@ -51,18 +51,33 @@ class ChatApp:
         self.master.geometry(self.window_state["geometry"])
         self.master.protocol("WM_DELETE_WINDOW", self.on_closing)
 
-        self.chat_history = scrolledtext.ScrolledText(self.master, state='disabled', height=20)
+        # メインフレームの作成
+        main_frame = tk.Frame(self.master)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # チャット履歴
+        self.chat_history = scrolledtext.ScrolledText(main_frame, state='disabled', height=20)
         self.chat_history.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
 
-        self.input_field = scrolledtext.ScrolledText(self.master, height=5)
-        self.input_field.pack(padx=10, pady=(0, 10), fill=tk.X)
-        self.input_field.bind("<Return>", self.send_message_event)  # Enterキーのバインド
+        # 入力欄とボタンを含む下部フレーム
+        bottom_frame = tk.Frame(main_frame)
+        bottom_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
 
-        self.send_button = tk.Button(self.master, text="送信", command=self.send_message)
-        self.send_button.pack(pady=(0, 10))
+        # 入力欄（サイズ変更可能）
+        self.input_field = scrolledtext.ScrolledText(bottom_frame, height=5)
+        self.input_field.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        self.clear_button = tk.Button(self.master, text="会話をクリア", command=self.clear_conversation)
-        self.clear_button.pack(pady=(0, 10))
+        # ボタンフレーム
+        button_frame = tk.Frame(bottom_frame)
+        button_frame.pack(side=tk.RIGHT, padx=(10, 0))
+
+        # 送信ボタン
+        self.send_button = tk.Button(button_frame, text="送信", command=self.send_message)
+        self.send_button.pack(fill=tk.X)
+
+        # クリアボタン
+        self.clear_button = tk.Button(button_frame, text="会話をクリア", command=self.clear_conversation)
+        self.clear_button.pack(fill=tk.X, pady=(10, 0))
 
     def setup_openai(self):
         self.client = AzureOpenAI(
@@ -70,10 +85,6 @@ class ChatApp:
             api_version="2023-05-15",
             azure_endpoint=self.settings["AZURE_OPENAI_ENDPOINT"]
         )
-
-    def send_message_event(self, event):
-        self.send_message()
-        return "break"
 
     def send_message(self):
         user_input = self.input_field.get("1.0", tk.END).strip()
