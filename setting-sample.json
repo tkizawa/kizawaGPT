@@ -1,0 +1,5 @@
+{
+    "AZURE_OPENAI_ENDPOINT": "https://xxxxxxxx.openai.azure.com/",
+    "AZURE_OPENAI_KEY": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "DEPLOYMENT_NAME": "Deploy"
+}
