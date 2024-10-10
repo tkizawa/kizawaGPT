@@ -66,6 +66,9 @@ class ChatApp:
         # 入力欄（サイズ変更可能）
         self.input_field = scrolledtext.ScrolledText(bottom_frame, height=5)
         self.input_field.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Ctrl+Enterでメッセージを送信
+        self.input_field.bind("<Control-Return>", self.send_message_event)
 
         # ボタンフレーム
         button_frame = tk.Frame(bottom_frame)
@@ -74,6 +77,10 @@ class ChatApp:
         # 送信ボタン
         self.send_button = tk.Button(button_frame, text="送信", command=self.send_message)
         self.send_button.pack(fill=tk.X)
+
+        # 続きボタン
+        self.continue_button = tk.Button(button_frame, text="続き", command=self.send_continue_message)
+        self.continue_button.pack(fill=tk.X, pady=(10, 0))
 
         # クリアボタン
         self.clear_button = tk.Button(button_frame, text="会話をクリア", command=self.clear_conversation)
@@ -86,13 +93,16 @@ class ChatApp:
             azure_endpoint=self.settings["AZURE_OPENAI_ENDPOINT"]
         )
 
+    def send_message_event(self, event):
+        """Ctrl+Enterキーのイベントハンドラ"""
+        self.send_message()
+
     def send_message(self):
         user_input = self.input_field.get("1.0", tk.END).strip()
         if user_input:
             self.update_chat_history(f"あなた: {user_input}\n", "user")
             self.input_field.delete("1.0", tk.END)
-
-            # Add user message to conversation history
+            # Send user message to the conversation history
             self.conversation_history.append({"role": "user", "content": user_input})
 
             try:
@@ -108,6 +118,27 @@ class ChatApp:
                 self.conversation_history.append({"role": "assistant", "content": ai_response})
             except Exception as e:
                 self.update_chat_history(f"エラーが発生しました: {str(e)}\n", "error")
+
+    def send_continue_message(self):
+        continue_message = "続きをお願いします"
+        self.update_chat_history(f"あなた: {continue_message}\n", "user")
+
+        # Add continue message to conversation history
+        self.conversation_history.append({"role": "user", "content": continue_message})
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.settings["DEPLOYMENT_NAME"],
+                messages=self.conversation_history,
+                max_tokens=1000
+            )
+            ai_response = response.choices[0].message.content
+            self.update_chat_history(f"AI: {ai_response}\n", "assistant")
+
+            # Add AI response to conversation history
+            self.conversation_history.append({"role": "assistant", "content": ai_response})
+        except Exception as e:
+            self.update_chat_history(f"エラーが発生しました: {str(e)}\n", "error")
 
     def update_chat_history(self, message, role):
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
