@@ -86,6 +86,10 @@ class ChatApp:
         self.clear_button = tk.Button(button_frame, text="会話をクリア", command=self.clear_conversation)
         self.clear_button.pack(fill=tk.X, pady=(10, 0))
 
+        # 保存ボタン
+        self.save_button = tk.Button(button_frame, text="保存", command=self.save_conversation)
+        self.save_button.pack(fill=tk.X, pady=(10, 0))
+
     def setup_openai(self):
         self.client = AzureOpenAI(
             api_key=self.settings["AZURE_OPENAI_KEY"],
@@ -159,6 +163,14 @@ class ChatApp:
         self.chat_history.delete("1.0", tk.END)
         self.chat_history.configure(state='disabled')
         self.update_chat_history("会話がクリアされました。新しい会話を開始します。\n", "system")
+
+    def save_conversation(self):
+        with open("conversation_history.txt", "w") as f:
+            for entry in self.conversation_history:
+                role = entry["role"]
+                content = entry["content"]
+                f.write(f"{role}: {content}\n")
+        self.update_chat_history("会話履歴が保存されました。\n", "system")
 
     def on_closing(self):
         self.save_window_state()
