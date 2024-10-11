@@ -27,6 +27,9 @@ class ChatApp:
         # 最後に保存したメッセージのインデックス
         self.last_saved_index = 0
 
+        # 現在の会話のファイル名を生成
+        self.current_filename = self.generate_filename()
+
     def load_settings(self):
         default_settings = {
             "AZURE_OPENAI_KEY": "your_default_key",
@@ -160,11 +163,14 @@ class ChatApp:
         self.chat_history.configure(state='disabled')
         self.update_chat_history("会話がクリアされました。新しい会話を開始します。\n", "system")
         self.last_saved_index = 0  # 最後に保存したインデックスをリセット
+        self.current_filename = self.generate_filename()  # 新しいファイル名を生成
         self.save_conversation()  # 自動保存
 
+    def generate_filename(self):
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        return f"会話履歴_{timestamp}.md"
+
     def save_conversation(self):
-        filename = "会話履歴.md"
-        
         # 新しいメッセージのみを保存
         new_messages = self.conversation_history[self.last_saved_index:]
         if not new_messages:
@@ -184,8 +190,7 @@ class ChatApp:
                 markdown_content += f"**AI**: {content}\n\n"
             markdown_content += "---\n\n"
         
-        mode = 'a' if os.path.exists(filename) else 'w'
-        with open(filename, mode, encoding="utf-8") as f:
+        with open(self.current_filename, 'a', encoding="utf-8") as f:
             f.write(markdown_content)
         
         self.last_saved_index = len(self.conversation_history)  # 保存したインデックスを更新
@@ -198,4 +203,3 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = ChatApp(root)
     root.mainloop()
-    
