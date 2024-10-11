@@ -1,9 +1,10 @@
 import tkinter as tk
-from tkinter import scrolledtext
+from tkinter import scrolledtext, ttk
 from openai import AzureOpenAI
 import json
 import os
 import datetime
+import threading
 
 class ChatApp:
     def __init__(self, master):
@@ -19,6 +20,12 @@ class ChatApp:
         self.conversation_history = [
             {"role": "system", "content": "You are a helpful assistant."}
         ]
+        
+        # 処理中フラグ
+        self.is_processing = False
+        
+        # 最後に保存したメッセージのインデックス
+        self.last_saved_index = 0
 
     def load_settings(self):
         default_settings = {
@@ -51,44 +58,37 @@ class ChatApp:
         self.master.geometry(self.window_state["geometry"])
         self.master.protocol("WM_DELETE_WINDOW", self.on_closing)
 
-        # メインフレームの作成
         main_frame = tk.Frame(self.master)
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        # チャット履歴
         self.chat_history = scrolledtext.ScrolledText(main_frame, state='disabled', height=20)
         self.chat_history.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
 
-        # 入力欄とボタンを含む下部フレーム
         bottom_frame = tk.Frame(main_frame)
         bottom_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
 
-        # 入力欄（サイズ変更可能）
         self.input_field = scrolledtext.ScrolledText(bottom_frame, height=5)
         self.input_field.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
-        # Ctrl+Enterでメッセージを送信
         self.input_field.bind("<Control-Return>", self.send_message_event)
 
-        # ボタンフレーム
         button_frame = tk.Frame(bottom_frame)
         button_frame.pack(side=tk.RIGHT, padx=(10, 0))
 
-        # 送信ボタン
         self.send_button = tk.Button(button_frame, text="送信", command=self.send_message)
         self.send_button.pack(fill=tk.X)
 
-        # 続きボタン
         self.continue_button = tk.Button(button_frame, text="続き", command=self.send_continue_message)
         self.continue_button.pack(fill=tk.X, pady=(10, 0))
 
-        # クリアボタン
         self.clear_button = tk.Button(button_frame, text="会話をクリア", command=self.clear_conversation)
         self.clear_button.pack(fill=tk.X, pady=(10, 0))
 
-        # 保存ボタン
-        self.save_button = tk.Button(button_frame, text="保存", command=self.save_conversation)
-        self.save_button.pack(fill=tk.X, pady=(10, 0))
+        self.exit_button = tk.Button(button_frame, text="終了", command=self.on_closing)
+        self.exit_button.pack(fill=tk.X, pady=(10, 0))
+
+        self.progress_bar = ttk.Progressbar(main_frame, mode='indeterminate')
+        self.progress_bar.pack(fill=tk.X, padx=10, pady=(0, 10))
 
     def setup_openai(self):
         self.client = AzureOpenAI(
@@ -98,38 +98,24 @@ class ChatApp:
         )
 
     def send_message_event(self, event):
-        """Ctrl+Enterキーのイベントハンドラ"""
         self.send_message()
 
     def send_message(self):
+        if self.is_processing:
+            return
+
         user_input = self.input_field.get("1.0", tk.END).strip()
         if user_input:
             self.update_chat_history(f"あなた: {user_input}\n", "user")
             self.input_field.delete("1.0", tk.END)
-            # Send user message to the conversation history
             self.conversation_history.append({"role": "user", "content": user_input})
 
-            try:
-                response = self.client.chat.completions.create(
-                    model=self.settings["DEPLOYMENT_NAME"],
-                    messages=self.conversation_history,
-                    max_tokens=1000
-                )
-                ai_response = response.choices[0].message.content
-                self.update_chat_history(f"AI: {ai_response}\n", "assistant")
+            self.is_processing = True
+            self.progress_bar.start()
+            
+            threading.Thread(target=self.process_message).start()
 
-                # Add AI response to conversation history
-                self.conversation_history.append({"role": "assistant", "content": ai_response})
-            except Exception as e:
-                self.update_chat_history(f"エラーが発生しました: {str(e)}\n", "error")
-
-    def send_continue_message(self):
-        continue_message = "続きをお願いします"
-        self.update_chat_history(f"あなた: {continue_message}\n", "user")
-
-        # Add continue message to conversation history
-        self.conversation_history.append({"role": "user", "content": continue_message})
-
+    def process_message(self):
         try:
             response = self.client.chat.completions.create(
                 model=self.settings["DEPLOYMENT_NAME"],
@@ -137,12 +123,22 @@ class ChatApp:
                 max_tokens=1000
             )
             ai_response = response.choices[0].message.content
-            self.update_chat_history(f"AI: {ai_response}\n", "assistant")
+            self.master.after(0, self.update_chat_history, f"AI: {ai_response}\n", "assistant")
 
-            # Add AI response to conversation history
             self.conversation_history.append({"role": "assistant", "content": ai_response})
+            self.save_conversation()  # 自動保存
         except Exception as e:
-            self.update_chat_history(f"エラーが発生しました: {str(e)}\n", "error")
+            self.master.after(0, self.update_chat_history, f"エラーが発生しました: {str(e)}\n", "error")
+        finally:
+            self.is_processing = False
+            self.master.after(0, self.progress_bar.stop)
+
+    def send_continue_message(self):
+        if not self.is_processing:
+            continue_message = "続きをお願いします"
+            self.update_chat_history(f"あなた: {continue_message}\n", "user")
+            self.conversation_history.append({"role": "user", "content": continue_message})
+            self.send_message()
 
     def update_chat_history(self, message, role):
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -163,14 +159,36 @@ class ChatApp:
         self.chat_history.delete("1.0", tk.END)
         self.chat_history.configure(state='disabled')
         self.update_chat_history("会話がクリアされました。新しい会話を開始します。\n", "system")
+        self.last_saved_index = 0  # 最後に保存したインデックスをリセット
+        self.save_conversation()  # 自動保存
 
     def save_conversation(self):
-        with open("conversation_history.txt", "w") as f:
-            for entry in self.conversation_history:
-                role = entry["role"]
-                content = entry["content"]
-                f.write(f"{role}: {content}\n")
-        self.update_chat_history("会話履歴が保存されました。\n", "system")
+        filename = "会話履歴.md"
+        
+        # 新しいメッセージのみを保存
+        new_messages = self.conversation_history[self.last_saved_index:]
+        if not new_messages:
+            return  # 新しいメッセージがない場合は保存しない
+        
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        markdown_content = f"# 会話履歴 - {timestamp}\n\n"
+        
+        for entry in new_messages:
+            role = entry["role"]
+            content = entry["content"]
+            if role == "system":
+                markdown_content += f"**システム**: {content}\n\n"
+            elif role == "user":
+                markdown_content += f"**あなた**: {content}\n\n"
+            elif role == "assistant":
+                markdown_content += f"**AI**: {content}\n\n"
+            markdown_content += "---\n\n"
+        
+        mode = 'a' if os.path.exists(filename) else 'w'
+        with open(filename, mode, encoding="utf-8") as f:
+            f.write(markdown_content)
+        
+        self.last_saved_index = len(self.conversation_history)  # 保存したインデックスを更新
 
     def on_closing(self):
         self.save_window_state()
@@ -180,3 +198,4 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = ChatApp(root)
     root.mainloop()
+    
