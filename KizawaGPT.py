@@ -36,11 +36,15 @@ class ChatApp:
         default_settings = {
             "AZURE_OPENAI_KEY": "your_default_key",
             "AZURE_OPENAI_ENDPOINT": "your_default_endpoint",
-            "DEPLOYMENT_NAME": "your_default_deployment_name"
+            "DEPLOYMENT_NAME": "your_default_deployment_name",
+            "MAX_TOKENS": 2000,
+            "TEMPERATURE": 0.7
         }
         try:
             with open('setting.json', 'r') as f:
-                self.settings = json.load(f)
+                loaded_settings = json.load(f)
+                # Update default settings with loaded settings
+                self.settings = {**default_settings, **loaded_settings}
         except (FileNotFoundError, json.JSONDecodeError):
             print("Error: setting.json file not found or invalid format. Using default settings.")
             self.settings = default_settings
@@ -137,12 +141,33 @@ class ChatApp:
             response = self.client.chat.completions.create(
                 model=self.settings["DEPLOYMENT_NAME"],
                 messages=self.conversation_history,
-                max_tokens=1000
+                max_tokens=self.settings["MAX_TOKENS"],
+                temperature=self.settings["TEMPERATURE"],
+                stop=None
             )
             ai_response = response.choices[0].message.content
-            self.master.after(0, self.update_chat_history, f"AI: {ai_response}\n", "assistant")
+            
+            # 応答の連続性をチェック
+            if ai_response.strip().endswith(('。', '．', '.', '!', '?', '：', ':', ';', '；')):
+                full_response = ai_response
+            else:
+                # 応答が途中で切れている可能性がある場合、続きを要求
+                self.conversation_history.append({"role": "assistant", "content": ai_response})
+                self.conversation_history.append({"role": "user", "content": "続きをお願いします。"})
+                
+                # 続きの応答を取得
+                continuation_response = self.client.chat.completions.create(
+                    model=self.settings["DEPLOYMENT_NAME"],
+                    messages=self.conversation_history,
+                    max_tokens=self.settings["MAX_TOKENS"],
+                    temperature=self.settings["TEMPERATURE"]
+                )
+                continuation = continuation_response.choices[0].message.content
+                
+                full_response = ai_response + "\n" + continuation
 
-            self.conversation_history.append({"role": "assistant", "content": ai_response})
+            self.master.after(0, self.update_chat_history, f"AI: {full_response}\n", "assistant")
+            self.conversation_history.append({"role": "assistant", "content": full_response})
             self.save_conversation()
         except Exception as e:
             self.master.after(0, self.update_chat_history, f"エラーが発生しました: {str(e)}\n", "error")
