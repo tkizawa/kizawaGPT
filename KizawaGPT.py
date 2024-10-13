@@ -1,11 +1,12 @@
 import tkinter as tk
-from tkinter import scrolledtext, ttk
+from tkinter import scrolledtext, ttk, filedialog
 from openai import AzureOpenAI
 import json
 import os
 import datetime
 import threading
 import re
+import subprocess
 
 class ChatApp:
     def __init__(self, master):
@@ -26,6 +27,10 @@ class ChatApp:
         self.last_saved_index = 0
         self.current_filename = None
         self.first_prompt = None
+
+        # Create the conversation history folder if it doesn't exist
+        self.history_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "会話履歴")
+        os.makedirs(self.history_folder, exist_ok=True)
 
     def load_settings(self):
         default_settings = {
@@ -83,6 +88,12 @@ class ChatApp:
 
         self.load_button = tk.Button(button_frame, text="会話の続き", command=self.load_latest_chat)
         self.load_button.pack(fill=tk.X, pady=(10, 0))
+
+        self.load_history_button = tk.Button(button_frame, text="会話履歴読み込み", command=self.load_chat_history)
+        self.load_history_button.pack(fill=tk.X, pady=(10, 0))
+
+        self.view_history_button = tk.Button(button_frame, text="会話履歴を見る", command=self.view_chat_history)
+        self.view_history_button.pack(fill=tk.X, pady=(10, 0))
 
         self.clear_button = tk.Button(button_frame, text="会話をクリア", command=self.clear_conversation)
         self.clear_button.pack(fill=tk.X, pady=(10, 0))
@@ -156,6 +167,33 @@ class ChatApp:
         except FileNotFoundError:
             self.update_chat_history("最新の会話ファイルが見つかりません。\n", "system")
 
+    def load_chat_history(self):
+        file_path = filedialog.askopenfilename(
+            initialdir=self.history_folder,
+            title="会話履歴を選択",
+            filetypes=[("Markdown files", "*.md"), ("Text files", "*.txt"), ("All files", "*.*")]
+        )
+        if file_path:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                self.input_field.delete("1.0", tk.END)
+                self.input_field.insert(tk.END, content)
+                self.send_message()
+            except Exception as e:
+                self.update_chat_history(f"ファイルの読み込み中にエラーが発生しました: {str(e)}\n", "error")
+
+    def view_chat_history(self):
+        try:
+            if os.name == 'nt':  # Windows
+                os.startfile(self.history_folder)
+            elif os.name == 'posix':  # macOS and Linux
+                subprocess.call(['open', self.history_folder])
+            else:
+                raise OSError("Unsupported operating system")
+        except Exception as e:
+            self.update_chat_history(f"会話履歴フォルダを開く際にエラーが発生しました: {str(e)}\n", "error")
+
     def update_chat_history(self, message, role):
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         divider = "-" * 50 + "\n"
@@ -181,12 +219,10 @@ class ChatApp:
 
     def generate_filename(self):
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        # 最初のプロンプトから無効な文字を除去し、最大30文字に制限
         sanitized_prompt = re.sub(r'[^\w\s-]', '', self.first_prompt)
         sanitized_prompt = sanitized_prompt.strip()[:30]
-        # 空白をアンダースコアに置換
         sanitized_prompt = re.sub(r'\s+', '_', sanitized_prompt)
-        return f"会話履歴_{timestamp}_{sanitized_prompt}.md"
+        return os.path.join(self.history_folder, f"会話履歴_{timestamp}_{sanitized_prompt}.md")
 
     def save_conversation(self):
         new_messages = self.conversation_history[self.last_saved_index:]
