@@ -7,7 +7,7 @@
 テキスト
 
 # 出力情報
-テキてきすとをストファイル
+テキストファイル
 
 # 処理内容
 (1) テキストを入力する
@@ -20,8 +20,8 @@
 
 プログラムと同じフォルダに setting.json というファイル名で記録して下さい。
 {
-    "AZURE_OPENAI_ENDPOINT": "https://kizawa-openai.openai.azure.com/",
-    "AZURE_OPENAI_KEY": "5a49f67fd79c448984e4771bcaa5fa33",
-    "DEPLOYMENT_NAME": "kizawaai4o"
+    "AZURE_OPENAI_ENDPOINT": "https://XXXXXXXXXX.openai.azure.com/",
+    "AZURE_OPENAI_KEY": "XXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "DEPLOYMENT_NAME": "deployname"
 }
 
